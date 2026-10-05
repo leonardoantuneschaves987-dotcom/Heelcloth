@@ -11,18 +11,27 @@ export async function lerPrecos(config) {
   return { ...PADRAO, ...(salvo || {}) };
 }
 
-export function orcar(precos, opcoes, nc, ns) {
-  const tex = opcoes.includes("texturizada"), pun = opcoes.includes("punhos"), man = opcoes.includes("manga_longa");
+// itens: cada linha da lista, com suas opções (texturizada, punhos, manga_longa).
+// "padrao" só é usado em encomendas antigas, em que a opção valia para o pedido inteiro.
+export function orcar(precos, itens, padrao = []) {
   const pl = (n, s, p) => (n === 1 ? s : p);
-  const linhas = [];
-  const pc = tex ? precos.camisa_text : precos.camisa;
-  linhas.push({ d: `${nc} ${pl(nc, "camisa", "camisas")} ${tex ? pl(nc, "texturizada", "texturizadas") : "tecido padrão"} × ${brl(pc)}`, v: r2(nc * pc) });
-  if (pun) { const dif = r2(precos.camisa_punho - precos.camisa); linhas.push({ d: `Personalização de punhos: ${nc} × ${brl(dif)}`, v: r2(nc * dif) }); }
-  if (man) {
-    if (precos.manga_longa > 0) linhas.push({ d: `Manga longa: ${nc} × ${brl(precos.manga_longa)}`, v: r2(nc * precos.manga_longa) });
-    else linhas.push({ d: "Manga longa: valor a combinar", v: 0, combinar: true });
+  const cam = {}, sho = {}, linhas = [];
+  const flags = (i) => { const o = Array.isArray(i.opcoes) ? i.opcoes : padrao; return { tex: o.includes("texturizada"), pun: o.includes("punhos"), man: o.includes("manga_longa") }; };
+  for (const i of itens) {
+    const f = flags(i);
+    if (i.tamCamisa) { const k = (f.tex ? "1" : "0") + (f.pun ? "1" : "0") + (f.man ? "1" : "0"); (cam[k] ??= { f, n: 0 }).n++; }
+    if (i.tamShort) { const k = f.tex ? "t" : "p"; (sho[k] ??= { tex: f.tex, n: 0 }).n++; }
   }
-  if (ns) { const ps = tex ? precos.short_text : precos.short; linhas.push({ d: `${ns} ${pl(ns, "short", "shorts")}${tex ? " texturizado" + (ns === 1 ? "" : "s") : ""} × ${brl(ps)}`, v: r2(ns * ps) }); }
+  for (const k of Object.keys(cam).sort()) {
+    const { f, n } = cam[k], mangaOk = precos.manga_longa > 0;
+    const unit = r2((f.tex ? precos.camisa_text : precos.camisa) + (f.pun ? precos.camisa_punho - precos.camisa : 0) + (f.man && mangaOk ? precos.manga_longa : 0));
+    const combinar = f.man && !mangaOk;
+    linhas.push({ d: `${n} ${pl(n, "camisa", "camisas")} ${f.tex ? pl(n, "texturizada", "texturizadas") : "tecido padrão"}${f.pun ? " com punhos personalizados" : ""}${f.man ? " manga longa" : ""} × ${brl(unit)}${combinar ? " (manga longa a combinar)" : ""}`, v: r2(n * unit), combinar });
+  }
+  for (const k of Object.keys(sho).sort()) {
+    const { tex, n } = sho[k], p = tex ? precos.short_text : precos.short;
+    linhas.push({ d: `${n} ${pl(n, "short", "shorts")}${tex ? " texturizado" + (n === 1 ? "" : "s") : ""} × ${brl(p)}`, v: r2(n * p) });
+  }
   return { linhas, total: r2(linhas.reduce((a, l) => a + l.v, 0)), aCombinar: linhas.some((l) => l.combinar) };
 }
 
